@@ -1,0 +1,75 @@
+library(NbClust)
+library(ggplot2)
+library(factoextra)
+library(fpc)
+library(cluster)
+library(readxl)
+
+#min-max normalization
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+#Import Data set
+vehicles <- read_excel("C:/Users/ASUS/Downloads/vehicles.xlsx")
+
+# remove outlines from numeric variables
+dataset <- as.data.frame(vehicles[2:19])
+outliers <- apply(dataset, 2, function(x) which(x > quantile(x, 0.75) + 1.5 * IQR(x) | x < quantile(x, 0.25) - 1.5 * IQR(x)))
+# remove the outliers
+outlier_indices <- unique(unlist(outliers))
+# subset the original data frame to remove the outliers
+outliersremoved <- dataset[-outlier_indices,]
+boxplot(outliersremoved)
+
+scaleddata <- as.data.frame(lapply(outliersremoved,normalize))
+boxplot(scaleddata)
+
+kclusteridentify <- function(dataframe) {
+  nc1 <- NbClust(dataframe,distance = "euclidean",min.nc = 2,max.nc = 15,method = "kmeans",index = "all")
+  nc2 <- NbClust(dataframe,distance = "manhattan",min.nc = 2,max.nc = 15,method = "kmeans",index = "all")
+  nc3 <- NbClust(dataframe, distance="maximum", min.nc=2,max.nc=15,method="kmeans",index="all")
+  
+  fviz_nbclust(dataframe, kmeans, method = 'wss')+geom_vline(xintercept = 3,linetype=5)
+  fviz_nbclust(dataframe, kmeans, method = 'gap_stat')
+  fviz_nbclust(dataframe, kmeans, method = 'silhouette')
+}
+
+clusterplot <- function(b,k,c) {
+  kmeans_result = kmeans(b, centers = k, nstart = 25)
+  # getting the result of all center points in  cluster
+  print(kmeans_result)
+  print(fviz_cluster(kmeans_result, data = b))
+  # getting the ratio of BSS and TSS
+  BssTssRatio <- kmeans_result$betweenss/kmeans_result$totss
+  cat("BSS/TSS : ", BssTssRatio, "\n")
+  # getting the BSS
+  Bss <- kmeans_result$betweenss
+  print(Bss)
+  #getting the WSS
+  Wss <- kmeans_result$tot.withinss
+  print(Wss)
+  sil <- silhouette(kmeans_result$cluster, dist(b))
+  print(fviz_silhouette(sil))
+  if (c==TRUE){
+    round(calinhara(b,kmeans_result$cluster),digits=2)
+  }
+}
+#manual plot
+kmeans_result = kmeans(scaleddata, centers = 4, nstart = 25)
+fviz_cluster(kmeans_result, data = scaleddata)
+
+#k-means
+kclusteridentify(scaleddata)
+clusterplot(scaleddata,2,FALSE)
+clusterplot(scaleddata,3,FALSE)
+
+#PCA
+pca_scaleddata = prcomp(scaleddata, center = FALSE, scale = FALSE)
+summary(pca_scaleddata)
+pcadataframe = as.data.frame(-pca_scaleddata$x[,1:3])
+summary(pcadataframe)
+#ideal cluster identification
+kclusteridentify(pcadataframe)
+#K3 cluster plot
+clusterplot(pcadataframe,3,TRUE)
